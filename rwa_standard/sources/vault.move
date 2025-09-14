@@ -82,7 +82,7 @@ public struct RwaRule<phantom T> has key {
 /// It can only be resolved by the `admin` of `T`.
 public struct RwaTransferRequest<phantom T> {
     from: Owner,
-    to: address,
+    to: Owner,
     amount: u64,
 }
 
@@ -102,7 +102,7 @@ public fun transfer<T>(
 
     let request = RwaTransferRequest {
         from: (&vault.owner).clone(),
-        to,
+        to: Owner::Address(to),
         amount: token.balance(),
     };
 
@@ -112,11 +112,34 @@ public fun transfer<T>(
     request
 }
 
+/// Allow vault-to-vault direct transfers to enable composability for
+/// protocols
+public fun transfer_to_vault<T>(
+    vault: &mut RwaVault,
+    proof: &VaultOwnerProof,
+    amount: u64,
+    to: &mut RwaVault,
+    _: &mut TxContext,
+): RwaTransferRequest<T> {
+    proof.assert_is_valid_for_vault(vault);
+
+    let balance = vault.withdraw_balance<T>(amount);
+
+    let request = RwaTransferRequest {
+        from: (&vault.owner).clone(),
+        to: (&to.owner).clone(),
+        amount: balance.value(),
+    };
+
+    to.deposit_balance(balance);
+    request
+}
+
 /// Allow squashing a set of tokens into the vault's balance.
 /// This is permissionless -- anyone can squash to claim storage rebates.
+///
+/// TODO: If there are object address balances, maybe this is the equivalent!
 public fun squash_tokens<T>(vault: &mut RwaVault, tokens: vector<Receiving<RwaToken<T>>>) {
-    vault.create_balance_if_not_exists<T>();
-
     let mut temp_balance = balance::zero<T>();
 
     tokens.do!(|receiving_token| {
@@ -124,9 +147,7 @@ public fun squash_tokens<T>(vault: &mut RwaVault, tokens: vector<Receiving<RwaTo
         temp_balance.join(token.extract());
     });
 
-    let vault_balance: &mut Balance<T> = df::borrow_mut(&mut vault.id, BalanceKey<T>());
-
-    vault_balance.join(temp_balance);
+    vault.deposit_balance(temp_balance);
 }
 
 /// U is a witness, which has to match the rule's witness.
@@ -141,8 +162,13 @@ public fun resolve_transfer<T, U: drop>(
     let RwaTransferRequest { .. } = request;
 }
 
-/// Allows the owner to clawback tokens from vaults, as long as it's allowed.
-public fun clawback<T, U: drop>(rule: &RwaRule<T>, vault: &mut RwaVault, amount: u64, _: U): Balance<T> {
+/// Allows the creator to clawback tokens from vaults, as long as it is allowed.
+public fun clawback<T, U: drop>(
+    rule: &RwaRule<T>,
+    vault: &mut RwaVault,
+    amount: u64,
+    _: U,
+): Balance<T> {
     assert!(rule.has_clawback, EClawbackNotAllowed);
     rule.assert_is_valid_creator_proof<T, U>();
 
@@ -168,6 +194,12 @@ fun clone(owner: &Owner): Owner {
         Owner::Address(address) => Owner::Address(*address),
         Owner::Object(id) => Owner::Object(*id),
     }
+}
+
+fun deposit_balance<T>(vault: &mut RwaVault, balance: Balance<T>) {
+    vault.create_balance_if_not_exists<T>();
+    let vault_balance: &mut Balance<T> = df::borrow_mut(&mut vault.id, BalanceKey<T>());
+    vault_balance.join(balance);
 }
 
 fun withdraw_balance<T>(vault: &mut RwaVault, amount: u64): Balance<T> {
