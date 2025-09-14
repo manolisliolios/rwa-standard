@@ -1,7 +1,7 @@
 module rwa::rule;
 
+use rwa::ptb_command::PtbCommand;
 use rwa::vault::{RwaTransferRequest, RwaVault};
-use std::string::String;
 use std::type_name::{Self, TypeName};
 use sui::balance::Balance;
 
@@ -35,7 +35,7 @@ public struct RwaRule<phantom T> has key {
     // `Arguments(Vector<Argument>)
     // where each argument is either a placeholder (OwnerVault, ReceiverVault, Rule, Request)
     // OR a Shared Object(ID), or an Immutable Object(ID)?
-    resolution_info: String,
+    resolution_info: PtbCommand,
 }
 
 /// U is a witness, which has to match the rule's witness.
