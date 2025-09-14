@@ -14,13 +14,13 @@ const ENotOwner: u64 = 1;
 const ENonExistentBalance: u64 = 2;
 const EClawbackNotAllowed: u64 = 3;
 
-/// The registry, from which all RWA entities are namespaced.
+/// The registry, from which all RWA related objects are namespaced.
 public struct RwaRegistry has key {
     id: UID,
 }
 
 /// The owner of a vault.
-public enum Owner has drop, store {
+public enum Owner has copy, drop, store {
     Address(address),
     Object(ID),
 }
@@ -80,13 +80,23 @@ public struct RwaRule<phantom T> has key {
 ///
 /// A hot potato that is issued when a transfer is initiated.
 /// It can only be resolved by the `admin` of `T`.
+///
+/// This enables the `resolve` function of each smart contract to
+/// be flexible and implement its own mechanisms for validation.
+/// The individual resolution module can:
+///   - Check whitelists/blacklists
+///   - Enforce holding periods
+///   - Collect fees
+///   - Emit regulatory events
+///   - Handle dividends/distributions
+///   - Implement any jurisdiction-specific rules
 public struct RwaTransferRequest<phantom T> {
     from: Owner,
     to: Owner,
     amount: u64,
 }
 
-/// Initiates a transfer for a `Token` from Vault A, to another Vault.
+/// Initiates a transfer for a `Token` from Vault A, to another Vault (no squashing)
 public fun transfer<T>(
     vault: &mut RwaVault,
     proof: &VaultOwnerProof,
@@ -101,7 +111,7 @@ public fun transfer<T>(
     let token = token::new(vault.withdraw_balance<T>(amount), ctx);
 
     let request = RwaTransferRequest {
-        from: (&vault.owner).clone(),
+        from: vault.owner,
         to: Owner::Address(to),
         amount: token.balance(),
     };
@@ -112,8 +122,8 @@ public fun transfer<T>(
     request
 }
 
-/// Allow vault-to-vault direct transfers to enable composability for
-/// protocols
+/// Initiates a transfer from Vault A to Vault B, with immediate squashing.
+/// This might be useful for defi operations (chaining of actions).
 public fun transfer_to_vault<T>(
     vault: &mut RwaVault,
     proof: &VaultOwnerProof,
@@ -126,8 +136,8 @@ public fun transfer_to_vault<T>(
     let balance = vault.withdraw_balance<T>(amount);
 
     let request = RwaTransferRequest {
-        from: (&vault.owner).clone(),
-        to: (&to.owner).clone(),
+        from: vault.owner,
+        to: to.owner,
         amount: balance.value(),
     };
 
@@ -187,13 +197,6 @@ public fun proof_as_uid(uid: &mut UID): VaultOwnerProof {
 
 fun assert_is_valid_creator_proof<T, U: drop>(rule: &RwaRule<T>) {
     assert!(type_name::with_defining_ids<U>() == rule.proof, EInvalidProof);
-}
-
-fun clone(owner: &Owner): Owner {
-    match (owner) {
-        Owner::Address(address) => Owner::Address(*address),
-        Owner::Object(id) => Owner::Object(*id),
-    }
 }
 
 fun deposit_balance<T>(vault: &mut RwaVault, balance: Balance<T>) {
