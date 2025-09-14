@@ -36,11 +36,11 @@ public enum TypeArgument has copy, drop, store {
 /// - App specific arguments / placeholders (like the known vaults, the rule, the transfer request)
 public enum Argument has copy, drop, store {
     /// Expect a shared reference of a shared object
-    SharedRef(ID),
+    SharedObjectRef(ID),
     /// Expect a mutable reference of a shared object
-    SharedMutRef(ID),
+    SharedObjectMutRef(ID),
     /// Expect an immutable reference
-    ImmutableRef(ID),
+    ImmutableObjectRef(ID),
     /// Expect a payment of `type` and `amount`.
     Payment(TypeName, u64),
     /// Standard specific placeholders. Maybe we can have a `StandardPlaceholder(String)`
