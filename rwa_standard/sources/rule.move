@@ -1,6 +1,6 @@
 module rwa::rule;
 
-use rwa::ptb_command::PtbCommand;
+use rwa::move_command::MoveCommand;
 use rwa::vault::{RwaTransferRequest, RwaVault};
 use std::type_name::{Self, TypeName};
 use sui::balance::Balance;
@@ -22,20 +22,7 @@ public struct RwaRule<phantom T> has key {
     // TODO: Come up with a standard way of saying "how do I generate the stamp?".
     // This can be used by wallets and SDKs to build "resolve_transfer" command in the
     // defining module.
-    //
-    // Example;
-    // `0xb::resolve::rule`
-    // with the following arguments:
-    // - request: RwaTransferRequest<T>
-    // - policy_object: shared_mut('0xfoo')
-    //
-    // Should we validate the struct here? e.g. make it so that it has an expected format?
-    // Should we build a "Command" format like
-    // `Function(address, module, function)`
-    // `Arguments(Vector<Argument>)
-    // where each argument is either a placeholder (OwnerVault, ReceiverVault, Rule, Request)
-    // OR a Shared Object(ID), or an Immutable Object(ID)?
-    resolution_info: PtbCommand,
+    resolution_info: MoveCommand,
 }
 
 /// U is a witness, which has to match the rule's witness.

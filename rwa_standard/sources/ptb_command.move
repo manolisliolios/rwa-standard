@@ -1,8 +1,17 @@
 #[allow(unused_field)]
-module rwa::ptb_command;
+module rwa::move_command;
 
 use std::ascii;
 use std::type_name::TypeName;
+
+/// A MoveCommand
+public struct PtbCommand has copy, drop, store {
+    address: ContractAddress,
+    module_name: ascii::String,
+    function_name: ascii::String,
+    arguments: vector<Argument>,
+    type_arguments: vector<TypeArgument>,
+}
 
 /// A contract address can be a static address, or a MVR name.
 public enum ContractAddress has copy, drop, store {
@@ -15,15 +24,6 @@ public enum ContractAddress has copy, drop, store {
 public enum TypeArgument has copy, drop, store {
     Placeholder,
     TypeName(TypeName),
-}
-
-/// A PtbCommand is
-public struct PtbCommand has copy, drop, store {
-    address: ContractAddress,
-    module_name: ascii::String,
-    function_name: ascii::String,
-    arguments: vector<Argument>,
-    type_arguments: vector<TypeArgument>,
 }
 
 /// The acceptable arguments for a contract are:
