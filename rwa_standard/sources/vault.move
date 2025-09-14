@@ -1,0 +1,186 @@
+/// RWA Standard
+module rwa::vault;
+
+use rwa::token::{Self, RwaToken};
+use std::string::String;
+use std::type_name::{Self, TypeName};
+use sui::balance::{Self, Balance};
+use sui::derived_object;
+use sui::dynamic_field as df;
+use sui::transfer::Receiving;
+
+const EInvalidProof: u64 = 0;
+const ENotOwner: u64 = 1;
+const ENonExistentBalance: u64 = 2;
+const EClawbackNotAllowed: u64 = 3;
+
+/// The registry, from which all RWA entities are namespaced.
+public struct RwaRegistry has key {
+    id: UID,
+}
+
+/// The owner of a vault.
+public enum Owner has drop, store {
+    Address(address),
+    Object(ID),
+}
+
+/// Tokens can only be transferred between Vaults.
+///
+/// Vaults are shared by default.
+///
+/// Clients can query balances by looking at the Balance<T> DFs of the vault.
+/// Clients can squash tokens by querying owned objects of type `Token` owned by the vault.
+///
+/// A vault is derived from `rwa_registry, address`.
+/// Objects can have their own vaults (registering with their `&mut UID`)
+public struct RwaVault has key {
+    id: UID,
+    // Used to store the registry id, without requiring it in follow-up transactions.
+    registry_id: ID,
+    /// The owner of the vault (address or object)
+    owner: Owner,
+}
+
+/// The key for a Balance of type `T`.
+public struct BalanceKey<phantom T>() has copy, drop, store;
+
+/// The key used to generate `RwaVault` for sender (or objects)
+public struct RwaVaultKey(address) has copy, drop, store;
+
+/// Proof of ownership for a given vault.
+public struct VaultOwnerProof(Owner) has drop;
+
+/// A rule is set by the owner of `T`, and points to a `TypeName` that needs
+/// to be verified by the entity's contract.
+///
+/// This is derived from `rwa_registry, TypeName<T>`
+public struct RwaRule<phantom T> has key {
+    id: UID,
+    /// If the rule has clawback, the owner can arbitrarily clawback tokens from vaults.
+    has_clawback: bool,
+    /// The typename used to prove
+    proof: TypeName,
+    // TODO: Come up with a standard way of saying "how do I generate the stamp?".
+    // This can be used by wallets and SDKs to build "resolve_transfer" command in the
+    // defining module.
+    //
+    // Example;
+    // `0xb::resolve::rule`
+    // with the following arguments:
+    // - request: RwaTransferRequest<T>
+    // - policy_object: shared_mut('0xfoo')
+    //
+    // Should we validate the struct here? e.g. make it so that it has an expected format?
+    resolution_info: String,
+}
+
+/// A transfer request that is generated once an RWA
+/// Token transfer is initiated.
+///
+/// A hot potato that is issued when a transfer is initiated.
+/// It can only be resolved by the `admin` of `T`.
+public struct RwaTransferRequest<phantom T> {
+    from: Owner,
+    to: address,
+    amount: u64,
+}
+
+/// Initiates a transfer for a `Token` from Vault A, to another Vault.
+public fun transfer<T>(
+    vault: &mut RwaVault,
+    proof: &VaultOwnerProof,
+    amount: u64,
+    // Recipients should always be plain addresses, not vault ids.
+    to: address,
+    ctx: &mut TxContext,
+): RwaTransferRequest<T> {
+    // verify that the proof is valid for the vault.
+    proof.assert_is_valid_for_vault(vault);
+
+    let token = token::new(vault.withdraw_balance<T>(amount), ctx);
+
+    let request = RwaTransferRequest {
+        from: (&vault.owner).clone(),
+        to,
+        amount: token.balance(),
+    };
+
+    let receiving_vault = derived_object::derive_address(vault.registry_id, RwaVaultKey(to));
+
+    token.transfer(receiving_vault);
+    request
+}
+
+/// Allow squashing a set of tokens into the vault's balance.
+/// This is permissionless -- anyone can squash to claim storage rebates.
+public fun squash_tokens<T>(vault: &mut RwaVault, tokens: vector<Receiving<RwaToken<T>>>) {
+    vault.create_balance_if_not_exists<T>();
+
+    let mut temp_balance = balance::zero<T>();
+
+    tokens.do!(|receiving_token| {
+        let token = token::receive(&mut vault.id, receiving_token);
+        temp_balance.join(token.extract());
+    });
+
+    let vault_balance: &mut Balance<T> = df::borrow_mut(&mut vault.id, BalanceKey<T>());
+
+    vault_balance.join(temp_balance);
+}
+
+/// U is a witness, which has to match the rule's witness.
+/// This is callable by the smart contract that has to approve a transfer.
+public fun resolve_transfer<T, U: drop>(
+    rule: &RwaRule<T>,
+    request: RwaTransferRequest<T>,
+    _stamp: U,
+) {
+    rule.assert_is_valid_creator_proof<T, U>();
+    // destructuring the request to finalize the transfer.
+    let RwaTransferRequest { .. } = request;
+}
+
+/// Allows the owner to clawback tokens from vaults, as long as it's allowed.
+public fun clawback<T, U: drop>(rule: &RwaRule<T>, vault: &mut RwaVault, amount: u64, _: U): Balance<T> {
+    assert!(rule.has_clawback, EClawbackNotAllowed);
+    rule.assert_is_valid_creator_proof<T, U>();
+
+    vault.withdraw_balance<T>(amount)
+}
+
+/// Generate an ownership proof from the sender of the transaction
+public fun proof_as_sender(ctx: &TxContext): VaultOwnerProof {
+    VaultOwnerProof(Owner::Address(ctx.sender()))
+}
+
+/// Generate an ownership proof from a `UID` object, to allow objects to own vaults.
+public fun proof_as_uid(uid: &mut UID): VaultOwnerProof {
+    VaultOwnerProof(Owner::Object(uid.to_inner()))
+}
+
+fun assert_is_valid_creator_proof<T, U: drop>(rule: &RwaRule<T>) {
+    assert!(type_name::with_defining_ids<U>() == rule.proof, EInvalidProof);
+}
+
+fun clone(owner: &Owner): Owner {
+    match (owner) {
+        Owner::Address(address) => Owner::Address(*address),
+        Owner::Object(id) => Owner::Object(*id),
+    }
+}
+
+fun withdraw_balance<T>(vault: &mut RwaVault, amount: u64): Balance<T> {
+    assert!(df::exists_(&vault.id, BalanceKey<T>()), ENonExistentBalance);
+    let vault_balance: &mut Balance<T> = df::borrow_mut(&mut vault.id, BalanceKey<T>());
+    vault_balance.split(amount)
+}
+
+fun create_balance_if_not_exists<T>(vault: &mut RwaVault) {
+    if (!df::exists_(&vault.id, BalanceKey<T>()))
+        df::add(&mut vault.id, BalanceKey<T>(), balance::zero<T>());
+}
+
+fun assert_is_valid_for_vault(proof: &VaultOwnerProof, vault: &RwaVault) {
+    assert!(&proof.0 == &vault.owner, ENotOwner);
+}
