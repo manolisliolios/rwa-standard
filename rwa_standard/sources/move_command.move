@@ -1,3 +1,5 @@
+/// This module is meant to be used only off-chain, for SDKs to be able to construct
+/// arbitrary PTBs.
 #[allow(unused_field)]
 module rwa::move_command;
 
@@ -16,7 +18,7 @@ public struct MoveCommand has copy, drop, store {
 /// A contract address can be a static address, or a MVR name.
 public enum ContractAddress has copy, drop, store {
     Address(address),
-    Module(ascii::String),
+    Mvr(ascii::String),
 }
 
 /// A type argument can be a placeholder (the `T` of the token),
@@ -42,7 +44,7 @@ public enum Argument has copy, drop, store {
     /// Expect a payment of `type` and `amount`.
     Payment(TypeName, u64),
     /// Standard specific placeholders. Maybe we can have a `StandardPlaceholder(String)`
-    /// and do validation ourselves.
+    /// and do validation differently.
     SenderVaultPlaceholder,
     ReceiverVaultPlaceholder,
     RulePlaceholder,
