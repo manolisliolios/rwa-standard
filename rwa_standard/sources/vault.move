@@ -2,22 +2,13 @@
 module rwa::vault;
 
 use rwa::token::{Self, RwaToken};
-use std::string::String;
-use std::type_name::{Self, TypeName};
 use sui::balance::{Self, Balance};
 use sui::derived_object;
 use sui::dynamic_field as df;
 use sui::transfer::Receiving;
 
-const EInvalidProof: u64 = 0;
 const ENotOwner: u64 = 1;
 const ENonExistentBalance: u64 = 2;
-const EClawbackNotAllowed: u64 = 3;
-
-/// The registry, from which all RWA related objects are namespaced.
-public struct RwaRegistry has key {
-    id: UID,
-}
 
 /// The owner of a vault.
 public enum Owner has copy, drop, store {
@@ -51,31 +42,6 @@ public struct RwaVaultKey(address) has copy, drop, store;
 /// Proof of ownership for a given vault.
 public struct VaultOwnerProof(Owner) has drop;
 
-/// A rule is set by the owner of `T`, and points to a `TypeName` that needs
-/// to be verified by the entity's contract.
-///
-/// This is derived from `rwa_registry, TypeName<T>`
-public struct RwaRule<phantom T> has key {
-    id: UID,
-    /// If the rule has clawback, the owner can arbitrarily clawback tokens from vaults.
-    /// This is only set on registration and cannot be updated in the future.
-    clawback_allowed: bool,
-    /// The typename used to prove
-    proof: TypeName,
-    // TODO: Come up with a standard way of saying "how do I generate the stamp?".
-    // This can be used by wallets and SDKs to build "resolve_transfer" command in the
-    // defining module.
-    //
-    // Example;
-    // `0xb::resolve::rule`
-    // with the following arguments:
-    // - request: RwaTransferRequest<T>
-    // - policy_object: shared_mut('0xfoo')
-    //
-    // Should we validate the struct here? e.g. make it so that it has an expected format?
-    resolution_info: String,
-}
-
 /// A transfer request that is generated once an RWA
 /// Token transfer is initiated.
 ///
@@ -97,12 +63,12 @@ public struct RwaTransferRequest<phantom T> {
     amount: u64,
 }
 
-/// Initiates a transfer for a `Token` from Vault A, to another Vault (no squashing)
+/// Initiates a transfer for a `Token` from Vault A, to another Vault (no squashing involved).
 public fun transfer<T>(
     vault: &mut RwaVault,
     proof: &VaultOwnerProof,
     amount: u64,
-    // Recipients should always be plain addresses, not vault ids.
+    // Recipients should always be plain addresses, not vaults.
     to: address,
     ctx: &mut TxContext,
 ): RwaTransferRequest<T> {
@@ -123,7 +89,7 @@ public fun transfer<T>(
     request
 }
 
-/// Initiates a transfer from Vault A to Vault B, with immediate squashing.
+/// Initiates a transfer from Vault A to Vault B, with immediate squashing of the balances.
 /// This might be useful for defi operations (chaining of actions).
 public fun transfer_to_vault<T>(
     vault: &mut RwaVault,
@@ -161,31 +127,6 @@ public fun squash_tokens<T>(vault: &mut RwaVault, tokens: vector<Receiving<RwaTo
     vault.deposit_balance(temp_balance);
 }
 
-/// U is a witness, which has to match the rule's witness.
-/// This is callable by the smart contract that has to approve a transfer.
-public fun resolve_transfer<T, U: drop>(
-    rule: &RwaRule<T>,
-    request: RwaTransferRequest<T>,
-    _stamp: U,
-) {
-    rule.assert_is_valid_creator_proof<T, U>();
-    // destructuring the request to finalize the transfer.
-    let RwaTransferRequest { .. } = request;
-}
-
-/// Allows the creator to clawback tokens from vaults, as long as it is allowed.
-public fun clawback<T, U: drop>(
-    rule: &RwaRule<T>,
-    vault: &mut RwaVault,
-    amount: u64,
-    _: U,
-): Balance<T> {
-    assert!(rule.clawback_allowed, EClawbackNotAllowed);
-    rule.assert_is_valid_creator_proof<T, U>();
-
-    vault.withdraw_balance<T>(amount)
-}
-
 /// Generate an ownership proof from the sender of the transaction
 public fun proof_as_sender(ctx: &TxContext): VaultOwnerProof {
     VaultOwnerProof(Owner::Address(ctx.sender()))
@@ -196,17 +137,18 @@ public fun proof_as_uid(uid: &mut UID): VaultOwnerProof {
     VaultOwnerProof(Owner::Object(uid.to_inner()))
 }
 
-fun assert_is_valid_creator_proof<T, U: drop>(rule: &RwaRule<T>) {
-    assert!(type_name::with_defining_ids<U>() == rule.proof, EInvalidProof);
+/// Internal function to resolve a transfer request.
+public(package) fun resolve<T>(request: RwaTransferRequest<T>) {
+    let RwaTransferRequest { .. } = request;
 }
 
-fun deposit_balance<T>(vault: &mut RwaVault, balance: Balance<T>) {
+public(package) fun deposit_balance<T>(vault: &mut RwaVault, balance: Balance<T>) {
     vault.create_balance_if_not_exists<T>();
     let vault_balance: &mut Balance<T> = df::borrow_mut(&mut vault.id, BalanceKey<T>());
     vault_balance.join(balance);
 }
 
-fun withdraw_balance<T>(vault: &mut RwaVault, amount: u64): Balance<T> {
+public(package) fun withdraw_balance<T>(vault: &mut RwaVault, amount: u64): Balance<T> {
     assert!(df::exists_(&vault.id, BalanceKey<T>()), ENonExistentBalance);
     let vault_balance: &mut Balance<T> = df::borrow_mut(&mut vault.id, BalanceKey<T>());
     vault_balance.split(amount)
