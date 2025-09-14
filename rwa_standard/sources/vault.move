@@ -58,7 +58,8 @@ public struct VaultOwnerProof(Owner) has drop;
 public struct RwaRule<phantom T> has key {
     id: UID,
     /// If the rule has clawback, the owner can arbitrarily clawback tokens from vaults.
-    has_clawback: bool,
+    /// This is only set on registration and cannot be updated in the future.
+    clawback_allowed: bool,
     /// The typename used to prove
     proof: TypeName,
     // TODO: Come up with a standard way of saying "how do I generate the stamp?".
@@ -179,7 +180,7 @@ public fun clawback<T, U: drop>(
     amount: u64,
     _: U,
 ): Balance<T> {
-    assert!(rule.has_clawback, EClawbackNotAllowed);
+    assert!(rule.clawback_allowed, EClawbackNotAllowed);
     rule.assert_is_valid_creator_proof<T, U>();
 
     vault.withdraw_balance<T>(amount)
