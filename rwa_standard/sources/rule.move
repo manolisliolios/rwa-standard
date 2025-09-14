@@ -12,6 +12,7 @@ const EClawbackNotAllowed: u64 = 1;
 /// to be verified by the entity's contract.
 ///
 /// This is derived from `rwa_registry, TypeName<T>`
+#[allow(unused_field)]
 public struct RwaRule<phantom T> has key {
     id: UID,
     /// If the rule has clawback, the owner can arbitrarily clawback tokens from vaults.
