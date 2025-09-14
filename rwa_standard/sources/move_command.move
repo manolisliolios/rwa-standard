@@ -41,7 +41,8 @@ public enum Argument has copy, drop, store {
     ImmutableRef(ID),
     /// Expect a payment of `type` and `amount`.
     Payment(TypeName, u64),
-    /// App specific arguments / placeholders.
+    /// Standard specific placeholders. Maybe we can have a `StandardPlaceholder(String)`
+    /// and do validation ourselves.
     SenderVaultPlaceholder,
     ReceiverVaultPlaceholder,
     RulePlaceholder,
