@@ -5,7 +5,7 @@ use std::ascii;
 use std::type_name::TypeName;
 
 /// A MoveCommand
-public struct PtbCommand has copy, drop, store {
+public struct MoveCommand has copy, drop, store {
     address: ContractAddress,
     module_name: ascii::String,
     function_name: ascii::String,
