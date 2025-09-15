@@ -19,7 +19,7 @@ public struct RwaRule<phantom T> has key {
     /// If the rule has clawback, the owner can arbitrarily clawback tokens from vaults.
     /// This is only set on registration and cannot be updated in the future.
     clawback_allowed: bool,
-    /// The typename used to prove
+    /// The typename used to prove that the "smart contract" agrees with a transfer.
     proof: TypeName,
     // TODO: Align on the `MoveCommand` architecture for making it easy to SDKs to resolve actions.
     // `TypeName` is the "action". E.g. `RwaTransferRequest`.
