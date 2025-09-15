@@ -4,6 +4,7 @@ use rwa::move_command::MoveCommand;
 use rwa::vault::{RwaTransferRequest, RwaVault};
 use std::type_name::{Self, TypeName};
 use sui::balance::Balance;
+use sui::vec_map::VecMap;
 
 const EInvalidProof: u64 = 0;
 const EClawbackNotAllowed: u64 = 1;
@@ -20,10 +21,10 @@ public struct RwaRule<phantom T> has key {
     clawback_allowed: bool,
     /// The typename used to prove
     proof: TypeName,
-    // TODO: Come up with a standard way of saying "how do I generate the stamp?".
-    // This can be used by wallets and SDKs to build "resolve_transfer" command in the
-    // defining module.
-    resolution_info: MoveCommand,
+    // TODO: Align on the `MoveCommand` architecture for making it easy to SDKs to resolve actions.
+    // `TypeName` is the "action". E.g. `RwaTransferRequest`.
+    // We make it a VecMap to allow expanding to support further actions in the standard.
+    resolution_info: VecMap<TypeName, MoveCommand>,
 }
 
 /// U is a witness, which has to match the rule's witness.
