@@ -14,6 +14,8 @@ The RWA Standard is a framework for issuing and managing permissioned tokens on 
 4. When you try to transfer, you issue an explicit TransferRequest, which can be resolved, on the PTB layer, calling the MoveCommand that is specified by the author. The author can "approve" it internally by calling this.
 5. Clawback is there by default (shared vault, author can stamp a clawback through their code / witness).
 
+(To be added: Issuers can attach "metadata" to user's Vaults (such as `KYC` stamps or AML stamps they issue), which they can then check on their transfer functions to restrict movement.)
+
 
 ## Key Features
 
