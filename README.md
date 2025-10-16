@@ -6,6 +6,8 @@
 
 The RWA Standard is a framework for issuing and managing permissioned tokens on Sui. It enables tokenization of real-world assets with built-in compliance mechanisms, transfer restrictions, and regulatory controls.
 
+> T⚠️ his demo implementation uses `Token<T>` for transferring from A to B, but that will be replaced with direct Balance sends when address balances are available.
+
 ## TLDR
 
 1. Each address has a single shared vault (derived address,  so easily discoverable). Objects can own vaults too (to help with account abstractions / defi protocols custom integrations)
