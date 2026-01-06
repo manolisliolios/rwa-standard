@@ -1,0 +1,9 @@
+[package]
+name = "pvs"
+edition = "2024.beta"
+
+[dependencies]
+
+[addresses]
+pvs = "0x0"
+

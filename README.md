@@ -1,20 +1,18 @@
 > # ⚠️ This project is experimental and work in progress! ⚠️
 
-# RWA Standard - Real World Assets on Sui
+# Permissioned Vaults Standard
 
 ## Overview
 
-The RWA Standard is a framework for issuing and managing permissioned tokens on Sui. It enables tokenization of real-world assets with built-in compliance mechanisms, transfer restrictions, and regulatory controls.
-
-> T⚠️ his demo implementation uses `Token<T>` for transferring from A to B, but that will be replaced with direct Balance sends when address balances are available.
+The P-Vault Standard is a framework for issuing and managing permissioned balances on Sui. It enables tokenization of real-world fungible assets with built-in compliance mechanisms, transfer restrictions, and regulatory controls.
 
 ## TLDR
 
-1. Each address has a single shared vault (derived address,  so easily discoverable). Objects can own vaults too (to help with account abstractions / defi protocols custom integrations)
+1. Each address has a single vault (derived address, with easy discoverability). Objects can own vaults as well. This enables with account abstractions / defi protocols implementations
 2. Vault uses address (object) balances (not in the PoC but that's the plan), so RPCs work out of the box (wallet just treats the vault address like a normal one). Wallet needs to query for normal address + vault address.
-3. RWAs can only move from vault to vault (we can now do this leveraging derived addresses (proof that an object A can only be transferred to object B)
-4. When you try to transfer, you issue an explicit TransferRequest, which can be resolved, on the PTB layer, calling the MoveCommand that is specified by the author. The author can "approve" it internally by calling this.
-5. Clawback is there by default (shared vault, author can stamp a clawback through their code / witness).
+3. Balances can only move from vault to vault (either by safe vault-to-vault deposits, or deriving the recipient with `unsafe_` calls)
+4. When a transfer is initiated, a `TransferRequest` is issued, which can be resolved, on the PTB layer, calling the `Command` that is specified by the issuer. The issuer can "approve" it in their own package by presenting a witness. Any custom logic (KYC, checks) can be implemented there.
+5. Clawback is available (vaults are shared and a clawback can be initiated using the issuer's witness).
 
 (To be added: Issuers can attach "metadata" to user's Vaults (such as `KYC` stamps or AML stamps they issue), which they can then check on their transfer functions to restrict movement. Since vaults are shared, issuers can revoke these stamps at any moment).
 
@@ -37,7 +35,7 @@ The RWA Standard is a framework for issuing and managing permissioned tokens on 
 
 ### Simple Discovery
 The standard uses derived objects for predictable addresses:
-- **Single vault per user** contains all RWA token balances
+- **Single vault per user** which holds the balances of the user
 - **No indexing required** - vault and rule addresses are deterministically computable
 - **One query** to see all user balances via dynamic fields on their vault
 
